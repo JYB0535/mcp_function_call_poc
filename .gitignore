@@ -1,0 +1,106 @@
+# Gradle
+.gradle/
+/build/
+.DS_Store
+.gradle
+/build
+/out
+.idea
+.project
+.settings
+bin/
+target/
+*.log
+*.log.*
+*.class
+*.jar
+*.war
+*.zip
+*.tar.gz
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iml
+*.ipr
+*.iws
+out/
+
+### Mac OS ###
+.DS_Store
+.history
+
+### Windows ###
+Thumbs.db
+ehthumbs.db
+*.stackdump
+
+# Java
+/bin/
+/target/
+.classpath
+.project
+.settings
+.factorypath
+
+# Maven
+/target/
+
+# Eclipse
+.project
+.classpath
+.settings/
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.externalToolBuilders/
+.apt_generated/
+
+# Spring Boot
+/build/
+/target/
+!**/src/main/**/build/
+!**/src/main/**/target/
+!**/src/test/**/build/
+!**/src/test/**/target/
+
+# Log files
+*.log
+
+# Package Files #
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# IDE-specific files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Misc
+.DS_Store
+hs_err_pid*
+.toolstarget
+.hprof
+
+# Gemini specific ignores
+.geminiignore
+.gemini/
