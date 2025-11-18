@@ -21,6 +21,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'com.google.genai:google-genai:1.27.0'
     implementation 'com.google.code.gson:gson'
+    // Milvus 벡터 데이터베이스와 상호작용하기 위한 Java SDK
+    implementation 'io.milvus:milvus-sdk-java:2.4.0'
     runtimeOnly 'com.h2database:h2'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

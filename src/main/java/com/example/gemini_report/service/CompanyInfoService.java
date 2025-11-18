@@ -11,22 +11,10 @@ import java.util.*;
 @RequiredArgsConstructor
 public class CompanyInfoService {
     private final Client client;
-    private final Map<String, float[]> companyEmbeddings = new HashMap<>();
-    private static final List<String> COMPANY_INFOS = Arrays.asList(
-            "우리회사는 2011년에 설립된 스마트팩토리 전문기업입니다.",
-            "주요 서비스는 MES, IoT 솔루션, AI 기반 생산관리입니다.",
-            "본사는 창원시에 있으며, 국내외 20여개 고객사를 보유하고 있습니다.",
-            "비전은 제조 현장의 혁신과 데이터 기반 생산성 향상입니다."
-    );
+    private final MilvusService milvusService; // MilvusService 주입
 
-    @PostConstruct
-    public void init() {
-        // Client와 Model을 컴포넌트 초기화 시 생성
-        embedCompanyInfo();
-    }
 
     public Map<String, Object> getCompanyInfo(String userQuery) {
-        float[] userVec;
         Map<String, Object> result = new HashMap<>();
 
         if (userQuery == null || userQuery.trim().isEmpty()) {
@@ -34,28 +22,39 @@ public class CompanyInfoService {
             return result;
         }
 
+        List<Float> userQueryEmbedding;
         try {
+            // 사용자 쿼리를 임베딩합니다.
             EmbedContentResponse userVecResp = this.client.models.embedContent("gemini-embedding-001", userQuery, null);
-            userVec = extractEmbedding(userVecResp);
+            float[] userVecArray = extractEmbedding(userVecResp);
+            
+            // float[]를 List<Float>으로 변환
+            userQueryEmbedding = new ArrayList<>();
+            for (float f : userVecArray) {
+                userQueryEmbedding.add(f);
+            }
         } catch (Exception e) {
             result.put("errorMessage", "{\"error\": \"Failed to process user query.\"}");
             return result;
         }
 
-        if (userVec.length == 0) {
+        if (userQueryEmbedding.isEmpty()) {
             result.put("errorMessage", "{\"error\": \"Could not generate embedding for the user query.\"}");
             return result;
         }
 
-        String bestMatch = "관련 정보를 찾을 수 없습니다.";
-        double bestScore = -1.0;
+        // Milvus에서 사용자 쿼리 임베딩과 가장 유사한 회사 정보를 검색합니다.
+        // topK는 가장 유사한 결과를 몇 개 가져올지 지정합니다. 여기서는 1개만 가져옵니다.
+        List<Map<String, Object>> searchResults = milvusService.search(userQueryEmbedding, 1);
 
-        for (Map.Entry<String, float[]> entry : companyEmbeddings.entrySet()) {
-            double score = cosineSimilarity(userVec, entry.getValue());
-            if (score > bestScore) {
-                bestScore = score;
-                bestMatch = entry.getKey();
-            }
+        String bestMatch = "관련 정보를 찾을 수 없습니다.";
+        float bestScore = 0.0f; // 유사도 점수는 0.0으로 초기화
+
+        if (!searchResults.isEmpty()) {
+            // 검색 결과가 있다면 가장 유사한 정보를 추출합니다.
+            Map<String, Object> topResult = searchResults.get(0);
+            bestMatch = (String) topResult.get("original_text"); // MilvusService에서 정의한 필드 이름
+            bestScore = (float) topResult.get("score");
         }
 
         result.put("사용자_질문", userQuery);
@@ -65,22 +64,43 @@ public class CompanyInfoService {
     }
 
 
-    private void embedCompanyInfo() {
-        System.out.println("Generating company info embeddings...");
-        for (String info : COMPANY_INFOS) {
-            try {
-                EmbedContentResponse resp = this.client.models.embedContent("gemini-embedding-001", info, null);
-                float[] embedding = extractEmbedding(resp);
-                companyEmbeddings.put(info, embedding);
-            } catch (Exception e) {
-                System.err.println("Failed to create embedding for: " + info);
-                e.printStackTrace();
+
+
+    public void updateCompanyInfo(String companyInfo) {
+        System.out.println("회사 정보 업데이트 및 Milvus에 삽입 중...");
+        // 기존 컬렉션 삭제 후 재생성하여 이전 데이터를 모두 지웁니다.
+        milvusService.recreateCollection();
+
+        List<List<Float>> embeddingsToInsert = new ArrayList<>();
+        List<String> textsToInsert = new ArrayList<>();
+
+        try {
+            // Gemini 모델을 사용하여 회사 정보 텍스트를 임베딩합니다.
+            EmbedContentResponse resp = this.client.models.embedContent("gemini-embedding-001", companyInfo, null);
+            float[] embeddingArray = extractEmbedding(resp);
+
+            // float[]를 List<Float>으로 변환
+            List<Float> embeddingList = new ArrayList<>();
+            for (float f : embeddingArray) {
+                embeddingList.add(f);
             }
+            embeddingsToInsert.add(embeddingList);
+            textsToInsert.add(companyInfo);
+        } catch (Exception e) {
+            System.err.println("임베딩 생성 실패: " + companyInfo);
+            e.printStackTrace();
         }
-        System.out.println("Company info embeddings are ready.");
+
+        // 생성된 모든 임베딩과 원본 텍스트를 Milvus에 한 번에 삽입합니다.
+        if (!embeddingsToInsert.isEmpty()) {
+            milvusService.insert(embeddingsToInsert, textsToInsert);
+            System.out.println("회사 정보 임베딩이 Milvus에 성공적으로 삽입되었습니다.");
+        } else {
+            System.out.println("삽입할 회사 정보 임베딩이 없습니다.");
+        }
     }
 
-    private float[] extractEmbedding(EmbedContentResponse response) {
+    private static float[] extractEmbedding(EmbedContentResponse response) {
         return Optional.ofNullable(response)
                 .flatMap(EmbedContentResponse::embeddings)
                 .flatMap(embeddings -> embeddings.stream().findFirst())
@@ -94,20 +114,6 @@ public class CompanyInfoService {
                 .orElse(new float[0]);
     }
 
-    private double cosineSimilarity(float[] vec1, float[] vec2) {
-        if (vec1 == null || vec2 == null || vec1.length == 0 || vec2.length == 0 || vec1.length != vec2.length) {
-            return 0.0;
-        }
-        double dot = 0.0, normA = 0.0, normB = 0.0;
-        for (int i = 0; i < vec1.length; i++) {
-            dot += vec1[i] * vec2[i];
-            normA += vec1[i] * vec1[i];
-            normB += vec2[i] * vec2[i];
-        }
-        if (normA == 0.0 || normB == 0.0) {
-            return 0.0;
-        }
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-    }
+
 
 }
